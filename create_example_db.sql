@@ -39,20 +39,21 @@ drop table if exists `student_preferences_survey_results`;
 
 create table `student_preferences_survey_results` (
     `student_name` text,
-    `favourite_philosopher` text
+    `favourite_philosopher` text,
+    `favourite_tradition` text
 );
 
 insert into `student_preferences_survey_results`
-values ('Brunhilda', 'Friedrich Waismann');
+values ('Brunhilda', 'Friedrich Waismann', 'Analytic');
 
 insert into `student_preferences_survey_results`
-values ('Fredegund', 'Judith Butler');
+values ('Fredegund', 'Judith Butler', 'Continental');
 
 insert into `student_preferences_survey_results`
-values ('Jonathan', 'Immanuel Kant');
+values ('Jonathan', 'Immanuel Kant', 'Analytic');
 
 insert into `student_preferences_survey_results`
-values ('Harold', 'Rudolf Carnap');
+values ('Harold', 'Rudolf Carnap', 'Continental');
 
 ------------------------------------------
 drop table if exists `conditions`;
@@ -65,3 +66,6 @@ create table `conditions` (
 
 insert into `conditions`
 values ('student_preferences_survey_results', 'favourite_philosopher', 'in(approved_philosophers.name)');
+
+insert into `conditions`
+values ('student_preferences_survey_results', 'favourite_tradition', 'in(approved_philosophers.tradition)');

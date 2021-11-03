@@ -3,7 +3,10 @@
   :url "https://github.com/lmcmicu/valve-sql.clj"
   :license {:name "BSD 3-Clause License"
             :url "https://opensource.org/licenses/BSD-3-Clause"}
-  :dependencies [[org.clojure/clojure "1.10.0"]]
+  :dependencies [[org.clojure/clojure "1.10.0"]
+                 [com.github.seancorfield/next.jdbc "1.2.731"]
+                 [org.xerial/sqlite-jdbc "3.36.0"]
+                 [instaparse "1.4.10"]]
   :source-paths ["src/clojure"]
   :java-source-paths ["src/java"]
   :main ^:skip-aot valve-sql.core
