@@ -1,4 +1,4 @@
-# valve.clj
+# valve-sql.clj
 VALVE in SQL wrapped in Clojure
 
 This project is a work in progress.
