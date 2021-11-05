@@ -145,6 +145,12 @@
            (remove nil?)
            (string/join " union "))
 
+      (= cond-name "any")
+      (->> cond-args
+           (map #(gen-sql {:table table :column column :pre-parsed pre-parsed :condition %}))
+           (remove nil?)
+           (string/join " intersect "))
+
       :else
       (log/error "Function:" cond-name "not yet supported by gen-sql."))
 
