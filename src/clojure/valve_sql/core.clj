@@ -161,24 +161,9 @@
     :else
     (log/error "Condition type:" cond-type "not yet supported by gen-sql.")))
 
-(defn -main
+(defn validate-conditions
   "TODO: Add a docstring here."
-  [& args]
-
-  ;; TODO:
-  ;; 1. Read in the `conditions` table and iterate through the conditions
-  ;;    - DONE
-  ;;
-  ;; 2. Write a `parse` function (see valve.clj) that will parse the condition using an instaparse
-  ;;    grammar and then send back the parsed condition.
-  ;;    - DONE (simply re-used grammar from valve.clj)
-  ;;
-  ;; 3. Generate the SQL statements needed to validate the parsed condition.
-  ;;    - DONE
-  ;;
-  ;; 4. Run the SQL statements.
-  ;;    - DONE
-  ;;
+  []
   (let [rows (jdbc/execute! conn ["select * from conditions"])]
     (->> rows
          (map parse)
@@ -186,5 +171,9 @@
          (remove nil?)
          (map #(do
                  (log/debug "Executing SQL:" %)
-                 (jdbc/execute! conn [%])))
-         (pprint))))
+                 (jdbc/execute! conn [%]))))))
+
+(defn -main
+  "TODO: Add a docstring here."
+  [& args]
+  (validate-conditions))
