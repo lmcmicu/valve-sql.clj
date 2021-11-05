@@ -194,6 +194,41 @@ values ('tiramisu'),
        ('brownies');
 
 ---------------------------------------------
+drop table if exists `white_wines`;
+
+create table `white_wines` (
+  `name` text
+);
+
+insert into `white_wines` (`name`)
+values ('chardonnay'),
+       ('riesling'),
+       ('sauvignon blanc');
+
+---------------------------------------------
+drop table if exists `red_wines`;
+
+create table `red_wines` (
+  `name` text
+);
+
+insert into `red_wines` (`name`)
+values ('merlot'),
+       ('valpolicella'),
+       ('chianti');
+
+---------------------------------------------
+drop table if exists `available_wines`;
+
+create table `available_wines` (
+  `name` text
+);
+
+insert into `available_wines` (`name`)
+values ('merlot'),
+       ('chianti');
+
+---------------------------------------------
 drop table if exists `meals`;
 
 create table `meals` (
@@ -203,15 +238,16 @@ create table `meals` (
   `second_course` text,
   `bread` text,
   `side` text,
-  `dessert` text
+  `dessert` text,
+  `wine` text
 );
 
 insert into `meals`
-            (`wedding_couple`,   `soup`,             `first_course`,  `second_course`, `bread`,        `side`,             `dessert`)
-values      ('Mork and Mindy',   'leek and potato',  'spaghetti',     'Ork burgers',   'panini',       'spinach',          'sundae'),
-            ('John and Nancy',   'leek and potato',  'penne',         'veal shank',    'wonder',       'cauliflower',      'tiramisu'),
-            ('Sam and Diane',    'tomato',           'rigatoni',      'vegan chili',   'baguette',     'spinach',          'cheesecake'),
-            ('Harry and Victor', 'cream of spinach', 'farfalle',      'filet mignon',  'pumpernickel', 'vegetarian tacos', 'chocolate cake');
+            (`wedding_couple`,   `soup`,             `first_course`,  `second_course`, `bread`,        `side`,             `dessert`,        `wine`)
+values      ('Mork and Mindy',   'leek and potato',  'spaghetti',     'Ork burgers',   'panini',       'spinach',          'sundae',         'merlot'),
+            ('John and Nancy',   'leek and potato',  'penne',         'veal shank',    'wonder',       'cauliflower',      'tiramisu',       'merlot'),
+            ('Sam and Diane',    'tomato',           'rigatoni',      'vegan chili',   'baguette',     'spinach',          'cheesecake',     'chianti'),
+            ('Harry and Victor', 'cream of spinach', 'farfalle',      'filet mignon',  'pumpernickel', 'vegetarian tacos', 'chocolate cake', 'chianti');
 
 
 ------------------------------------------
@@ -229,4 +265,5 @@ values ('meals', 'soup', 'all(in(soups.name), in(available_soups.name))'),
        ('meals', 'second_course', 'any(all(in(meats.name), in(available_meats.name)), all(in(veggie_mains.name), in(available_veggie_mains.name)))'),
        ('meals', 'bread', 'all(in(breads.name), in(available_breads.name))'),
        ('meals', 'side', 'all(in(vegetables.name), in(available_vegetables.name))'),
-       ('meals', 'dessert', 'all(in(desserts.name), in(available_desserts.name))');
+       ('meals', 'dessert', 'all(in(desserts.name), in(available_desserts.name))'),
+       ('meals', 'wine', 'all(any(in(white_wines.name), in(red_wines.name)), in(available_wines.name))');
