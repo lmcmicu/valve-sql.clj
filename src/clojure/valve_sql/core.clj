@@ -104,7 +104,47 @@
              (#(if (> (count %) 1)
                  (throw (Exception. (str "Unable to parse condition: '" condition
                                          "'. Got result vector with more than one entry: " result)))
-                 (first %))))))))
+                 {:table table
+                  :column column
+                  :pre-parsed condition
+                  :condition (first %)})))))))
+
+(defn validate-in
+  "TODO: Add a docstring here"
+  [table column pre-parsed args]
+  (log/debug "Generating SQL to validate function: in with args:" args "against table.column:"
+             (str table "." column))
+  (letfn [(field-condition [{child-table :table
+                             child-column :column}]
+            (str column " not in ("
+                 "select " child-column " from " child-table ")"))]
+    (str "select " table ".*, '" pre-parsed "' as failed_condition "
+         "from " table " where "
+         (->> args
+              (map field-condition)
+              (string/join " or ")))))
+
+(defn gen-sql
+  "TODO: Add a docstring here"
+  [{table :table
+    column :column
+    pre-parsed :pre-parsed
+    {cond-type :type
+     cond-name :name
+     cond-args :args} :condition}]
+  (log/debug "Generating SQL for cond-name:" cond-name "of type:" cond-type "with args:" cond-args
+             "against table.column:" (str table "." column))
+  (cond
+    (= cond-type "function")
+    (cond
+      (= cond-name "in")
+      (validate-in table column pre-parsed cond-args)
+
+      :else
+      (log/error "Function:" cond-name "not yet supported."))
+
+    :else
+    (log/error "Condition type:" cond-type "not yet supported.")))
 
 (defn -main
   "TODO: Add a docstring here."
@@ -119,9 +159,14 @@
   ;;    - DONE (simply re-used grammar from valve.clj)
   ;;
   ;; 3. Generate the SQL statements needed to validate the parsed condition.
+  ;;    - DONE
   ;;
   ;; 4. Run the SQL statements.
+  ;;    - DONE
   ;;
-
   (let [rows (jdbc/execute! conn ["select * from conditions"])]
-    (->> rows (map parse) (pprint))))
+    (->> rows
+         (map parse)
+         (map gen-sql)
+         (map #(jdbc/execute! conn [%]))
+         (pprint))))
