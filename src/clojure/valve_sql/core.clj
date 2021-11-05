@@ -109,20 +109,18 @@
                   :pre-parsed condition
                   :condition (first %)})))))))
 
-(defn validate-in
+(defn gen-sql-in
   "TODO: Add a docstring here"
-  [table column pre-parsed args]
+  [table column args]
   (log/debug "Generating SQL to validate function: in with args:" args "against table.column:"
              (str table "." column))
   (letfn [(field-condition [{child-table :table
                              child-column :column}]
             (str column " not in ("
                  "select " child-column " from " child-table ")"))]
-    (str "select " table ".*, '" pre-parsed "' as failed_condition "
-         "from " table " where "
-         (->> args
-              (map field-condition)
-              (string/join " or ")))))
+    (->> args
+         (map field-condition)
+         (string/join " or "))))
 
 (defn gen-sql
   "TODO: Add a docstring here"
@@ -138,7 +136,8 @@
     (= cond-type "function")
     (cond
       (= cond-name "in")
-      (validate-in table column pre-parsed cond-args)
+      (str "select " table ".*, '" pre-parsed "' as failed_condition from " table " where "
+           (gen-sql-in table column cond-args))
 
       :else
       (log/error "Function:" cond-name "not yet supported."))
