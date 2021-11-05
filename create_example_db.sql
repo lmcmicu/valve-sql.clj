@@ -190,7 +190,6 @@ insert into `available_desserts` (`name`)
 values ('tiramisu'),
        ('sundae'),
        ('ice cream scoop'),
-       ('cheesecake'),
        ('chocolate cake'),
        ('brownies');
 
@@ -211,7 +210,7 @@ insert into `meals`
             (`wedding_couple`,   `soup`,             `first_course`,  `second_course`, `bread`,        `side`,             `dessert`)
 values      ('Mork and Mindy',   'leek and potato',  'spaghetti',     'Ork burgers',   'panini',       'spinach',          'sundae'),
             ('John and Nancy',   'leek and potato',  'penne',         'veal shank',    'wonder',       'cauliflower',      'tiramisu'),
-            ('San and Diane',    'tomato',           'rigatoni',      'vegan chili',   'baguette',     'spinach',          'cheesecake'),
+            ('Sam and Diane',    'tomato',           'rigatoni',      'vegan chili',   'baguette',     'spinach',          'cheesecake'),
             ('Harry and Victor', 'cream of spinach', 'farfalle',      'filet mignon',  'pumpernickel', 'vegetarian tacos', 'chocolate cake');
 
 
@@ -227,7 +226,7 @@ create table `conditions` (
 insert into `conditions` (`table`, `column`, `condition`)
 values ('meals', 'soup', 'all(in(soups.name), in(available_soups.name))'),
        ('meals', 'first_course', 'all(in(pastas.name), in(available_pastas.name))'),
-       ('meals', 'second_course', 'all(in(meats.name), in(available_meats.name))'),
+       ('meals', 'second_course', 'any(all(in(meats.name), in(available_meats.name)), all(in(veggie_mains.name), in(available_veggie_mains.name)))'),
        ('meals', 'bread', 'all(in(breads.name), in(available_breads.name))'),
        ('meals', 'side', 'all(in(vegetables.name), in(available_vegetables.name))'),
        ('meals', 'dessert', 'all(in(desserts.name), in(available_desserts.name))');

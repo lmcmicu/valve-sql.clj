@@ -140,16 +140,20 @@
            (gen-sql-in table column cond-args))
 
       (= cond-name "all")
-      (->> cond-args
-           (map #(gen-sql {:table table :column column :pre-parsed pre-parsed :condition %}))
-           (remove nil?)
-           (string/join " union "))
+      (let [inner-sql (->> cond-args
+                           (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
+                                           :condition %}))
+                           (remove nil?)
+                           (string/join " union "))]
+        (str "select * from (" inner-sql ")"))
 
       (= cond-name "any")
-      (->> cond-args
-           (map #(gen-sql {:table table :column column :pre-parsed pre-parsed :condition %}))
-           (remove nil?)
-           (string/join " intersect "))
+      (let [inner-sql (->> cond-args
+                           (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
+                                           :condition %}))
+                           (remove nil?)
+                           (string/join " intersect "))]
+        (str "select * from (" inner-sql ")"))
 
       :else
       (log/error "Function:" cond-name "not yet supported by gen-sql."))
