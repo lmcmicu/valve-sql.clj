@@ -1,115 +1,233 @@
-drop table if exists `twentieth_century_philosophers`;
+---------------------------------------------
+drop table if exists `breads`;
 
-create table `twentieth_century_philosophers` (
-    `name` text,
-    `tradition` text,
-    `nationality` text
+create table `breads` (
+  `name` text
 );
 
-insert into `twentieth_century_philosophers`
-values ('Moritz Schlick', 'Analytic', 'German');
+insert into `breads` (`name`)
+values ('panini'),
+       ('baguette'),
+       ('whole wheat'),
+       ('pumpernickel'),
+       ('wonder');
 
-insert into `twentieth_century_philosophers`
-values ('Rudolf Carnap', 'Analytic', 'German');
+---------------------------------------------
+drop table if exists `available_breads`;
 
-insert into `twentieth_century_philosophers`
-values ('Otto Neurath', 'Analytic', 'Austrian');
-
-insert into `twentieth_century_philosophers`
-values ('Friedrich Waismann', 'Analytic', 'Austrian');
-
-insert into `twentieth_century_philosophers`
-values ('Martin Heidegger', 'Continental', 'German');
-
-insert into `twentieth_century_philosophers`
-values ('A. J. Ayer', 'Analytic', 'English');
-
-insert into `twentieth_century_philosophers`
-values ('J. P. Sartre', 'Continental', 'French');
-
-insert into `twentieth_century_philosophers`
-values ('Maurice Merleau-Ponty', 'Continental', 'French');
-
-insert into `twentieth_century_philosophers`
-values ('Judith Butler', 'Continental', 'American');
-
-insert into `twentieth_century_philosophers`
-values ('W. V. O. Quine', 'Analytic', 'American');
-
-insert into `twentieth_century_philosophers`
-values ('Ludwig Wittgenstein', 'Mixed', 'Austrian');
-
-------------------------------------------
-
-drop table if exists `philosophers_covered_in_the_course`;
-
-create table `philosophers_covered_in_the_course` (
-    `name` text,
-    `tradition` text,
-    `nationality` text
+create table `available_breads` (
+  `name` text
 );
 
-insert into `philosophers_covered_in_the_course`
-values ('Moritz Schlick', 'Analytic', 'German');
+insert into `available_breads` (`name`)
+values ('panini'),
+       ('baguette'),
+       ('whole wheat'),
+       ('pumpernickel'),
+       ('wonder');
 
-insert into `philosophers_covered_in_the_course`
-values ('Rudolf Carnap', 'Analytic', 'German');
+---------------------------------------------
+drop table if exists `vegetables`;
 
-insert into `philosophers_covered_in_the_course`
-values ('Otto Neurath', 'Analytic', 'Austrian');
-
-insert into `philosophers_covered_in_the_course`
-values ('Friedrich Waismann', 'Analytic', 'Austrian');
-
-insert into `philosophers_covered_in_the_course`
-values ('J. P. Sartre', 'Continental', 'French');
-
-insert into `philosophers_covered_in_the_course`
-values ('Maurice Merleau-Ponty', 'Continental', 'French');
-
-------------------------------------------
-
-drop table if exists `student_preferences_survey_results`;
-
-create table `student_preferences_survey_results` (
-    `student_name` text,
-    `favourite_philosopher` text,
-    `favourite_tradition` text
+create table `vegetables` (
+  `name` text
 );
 
-insert into `student_preferences_survey_results`
-values ('Brunhilda', 'Friedrich Waismann', 'Analytic');
+insert into `vegetables` (`name`)
+values ('brussels sprouts'),
+       ('cauliflower'),
+       ('spinach'),
+       ('carrots'),
+       ('beets');
 
-insert into `student_preferences_survey_results`
-values ('Fredegund', 'Judith Butler', 'Continental');
+---------------------------------------------
+drop table if exists `available_vegetables`;
 
-insert into `student_preferences_survey_results`
-values ('Jonathan', 'Immanuel Kant', 'Analytic');
+create table `available_vegetables` (
+  `name` text
+);
 
-insert into `student_preferences_survey_results`
-values ('Harold', 'Rudolf Carnap', 'Continental');
+insert into `available_vegetables` (`name`)
+values ('brussels sprouts'),
+       ('cauliflower'),
+       ('spinach'),
+       ('carrots'),
+       ('beets');
 
-insert into `student_preferences_survey_results`
-values ('Cindy', 'Friedrich Waismann', 'Neither');
+---------------------------------------------
+drop table if exists `pastas`;
 
-insert into `student_preferences_survey_results`
-values ('Janet', 'Plato', 'Neither');
+create table `pastas` (
+  `name` text
+);
+
+insert into `pastas` (`name`)
+values ('farfalle'),
+       ('penne'),
+       ('spaghetti'),
+       ('fetuccine'),
+       ('rigatoni'),
+       ('gemeli');
+
+---------------------------------------------
+drop table if exists `available_pastas`;
+
+create table `available_pastas` (
+  `name` text
+);
+
+insert into `available_pastas` (`name`)
+values ('farfalle'),
+       ('penne'),
+       ('spaghetti'),
+       ('fetuccine'),
+       ('rigatoni'),
+       ('gemeli');
+
+---------------------------------------------
+drop table if exists `soups`;
+
+create table `soups` (
+  `name` text
+);
+
+insert into `soups` (`name`)
+values ('leek and potato'),
+       ('cream of celery'),
+       ('Italian wedding'),
+       ('tomato');
+
+---------------------------------------------
+drop table if exists `available_soups`;
+
+create table `available_soups` (
+  `name` text
+);
+
+insert into `available_soups` (`name`)
+values ('leek and potato'),
+       ('cream of celery'),
+       ('Italian wedding'),
+       ('tomato');
+
+---------------------------------------------
+drop table if exists `meats`;
+
+create table `meats` (
+  `name` text
+);
+
+insert into `meats` (`name`)
+values ('prime rib'),
+       ('filet mignon'),
+       ('lamb chops'),
+       ('veal shank');
+
+---------------------------------------------
+drop table if exists `available_meats`;
+
+create table `available_meats` (
+  `name` text
+);
+
+insert into `available_meats` (`name`)
+values ('prime rib'),
+       ('filet mignon'),
+       ('lamb chops'),
+       ('veal shank');
+
+---------------------------------------------
+drop table if exists `veggie_mains`;
+
+create table `veggie_mains` (
+  `name` text
+);
+
+insert into `veggie_mains` (`name`)
+values ('vegan curry'),
+       ('fried jackfruit'),
+       ('portobello burgers'),
+       ('vegan chili'),
+       ('vegetarian tacos');
+
+---------------------------------------------
+drop table if exists `available_veggie_mains`;
+
+create table `available_veggie_mains` (
+  `name` text
+);
+
+insert into `available_veggie_mains` (`name`)
+values ('vegan curry'),
+       ('fried jackfruit'),
+       ('portobello burgers'),
+       ('vegan chili'),
+       ('vegetarian tacos');
+
+---------------------------------------------
+drop table if exists `desserts`;
+
+create table `desserts` (
+  `name` text
+);
+
+insert into `desserts` (`name`)
+values ('tiramisu'),
+       ('sundae'),
+       ('ice cream scoop'),
+       ('cheesecake'),
+       ('chocolate cake'),
+       ('brownies');
+
+---------------------------------------------
+drop table if exists `available_desserts`;
+
+create table `available_desserts` (
+  `name` text
+);
+
+insert into `available_desserts` (`name`)
+values ('tiramisu'),
+       ('sundae'),
+       ('ice cream scoop'),
+       ('cheesecake'),
+       ('chocolate cake'),
+       ('brownies');
+
+---------------------------------------------
+drop table if exists `meals`;
+
+create table `meals` (
+  `wedding_couple` text,
+  `soup` text,
+  `first_course` text,
+  `second_course` text,
+  `bread` text,
+  `side` text,
+  `dessert` text
+);
+
+insert into `meals`
+            (`wedding_couple`,   `soup`,             `first_course`,  `second_course`, `bread`,        `side`,             `dessert`)
+values      ('Mork and Mindy',   'leek and potato',  'spaghetti',     'Ork burgers',   'panini',       'spinach',          'sundae'),
+            ('John and Nancy',   'leek and potato',  'penne',         'veal shank',    'wonder',       'cauliflower',      'tiramisu'),
+            ('San and Diane',    'tomato',           'rigatoni',      'vegan chili',   'baguette',     'spinach',          'cheesecake'),
+            ('Harry and Victor', 'cream of spinach', 'farfalle',      'filet mignon',  'pumpernickel', 'vegetarian tacos', 'chocolate cake');
+
 
 ------------------------------------------
 drop table if exists `conditions`;
 
 create table `conditions` (
-    `table` text,
-    `column` text,
-    `condition` text
+  `table` text,
+  `column` text,
+  `condition` text
 );
 
-insert into `conditions`
-values ('student_preferences_survey_results',
-        'favourite_philosopher',
-        'in(twentieth_century_philosophers.name, philosophers_covered_in_the_course.name)');
-
-insert into `conditions`
-values ('student_preferences_survey_results',
-        'favourite_tradition',
-        'in(twentieth_century_philosophers.tradition, philosophers_covered_in_the_course.tradition)');
+insert into `conditions` (`table`, `column`, `condition`)
+values ('meals', 'soup', 'all(in(soups.name), in(available_soups.name))'),
+       ('meals', 'first_course', 'all(in(pastas.name), in(available_pastas.name))'),
+       ('meals', 'second_course', 'all(in(meats.name), in(available_meats.name))'),
+       ('meals', 'bread', 'all(in(breads.name), in(available_breads.name))'),
+       ('meals', 'side', 'all(in(vegetables.name), in(available_vegetables.name))'),
+       ('meals', 'dessert', 'all(in(desserts.name), in(available_desserts.name))');

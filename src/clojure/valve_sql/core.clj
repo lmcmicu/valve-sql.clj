@@ -112,7 +112,7 @@
 (defn gen-sql-in
   "TODO: Add a docstring here"
   [table column args]
-  (log/debug "Generating SQL to validate function: in with args:" args "against table.column:"
+  (log/debug "Generating SQL to validate function: 'in' with args:" args "against table.column:"
              (str table "." column))
   (letfn [(field-condition [{child-table :table
                              child-column :column}]
@@ -139,11 +139,17 @@
       (str "select " table ".*, '" pre-parsed "' as failed_condition from " table " where "
            (gen-sql-in table column cond-args))
 
+      (= cond-name "all")
+      (->> cond-args
+           (map #(gen-sql {:table table :column column :pre-parsed pre-parsed :condition %}))
+           (remove nil?)
+           (string/join " union "))
+
       :else
-      (log/error "Function:" cond-name "not yet supported."))
+      (log/error "Function:" cond-name "not yet supported by gen-sql."))
 
     :else
-    (log/error "Condition type:" cond-type "not yet supported.")))
+    (log/error "Condition type:" cond-type "not yet supported by gen-sql.")))
 
 (defn -main
   "TODO: Add a docstring here."
@@ -167,5 +173,8 @@
     (->> rows
          (map parse)
          (map gen-sql)
-         (map #(jdbc/execute! conn [%]))
+         (remove nil?)
+         (map #(do
+                 (log/debug "Executing SQL:" %)
+                 (jdbc/execute! conn [%])))
          (pprint))))
