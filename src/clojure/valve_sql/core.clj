@@ -166,20 +166,26 @@
     :else
     (log/error "Condition type:" cond-type "not yet supported by gen-sql.")))
 
-(defn validate-conditions
-  "TODO: Add a docstring here."
-  []
-  (let [rows (jdbc/execute! conn ["select * from conditions"])]
-    (->> rows
-         (map parse)
-         (map gen-sql)
-         (remove nil?)
-         (map sql/format)
-         (map #(do
-                 (log/debug "Executing SQL:" %)
-                 (jdbc/execute! conn %))))))
+(defn sqlify-condition
+  "TODO: Add a docstring here"
+  [condition]
+  (-> condition
+      (parse)
+      (gen-sql)
+      (sql/format)))
+
+(defn validate-condition
+  "TODO: Add a docstring here"
+  [condition]
+  (-> condition
+      (sqlify-condition)
+      (#(do
+          (log/debug "Executing SQL:" %)
+          (jdbc/execute! conn %)))))
 
 (defn -main
   "TODO: Add a docstring here."
   [& args]
-  (validate-conditions))
+  (let [rows (jdbc/execute! conn ["select * from conditions"])]
+    (->> rows
+         (map validate-condition))))
