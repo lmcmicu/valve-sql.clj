@@ -2,6 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
             [clojure.pprint :refer [pprint]]
+            [honey.sql :as sql]
+            [honey.sql.helpers :refer [select from where union intersect]]
             [instaparse.core :as insta]
             [next.jdbc :as jdbc]
             [valve-sql.log :as log])
@@ -116,11 +118,11 @@
              (str table "." column))
   (letfn [(field-condition [{child-table :table
                              child-column :column}]
-            (str column " not in ("
-                 "select " child-column " from " child-table ")"))]
+            [:not [:in (keyword column) (-> (select (keyword child-column))
+                                            (from (keyword child-table)))]])]
     (->> args
          (map field-condition)
-         (string/join " or "))))
+         (apply conj [:or]))))
 
 (defn gen-sql
   "TODO: Add a docstring here"
@@ -136,24 +138,27 @@
     (= cond-type "function")
     (cond
       (= cond-name "in")
-      (str "select " table ".*, '" pre-parsed "' as failed_condition from " table " where "
-           (gen-sql-in table column cond-args))
+      (-> (select :* [pre-parsed :failed-condition])
+          (from (keyword table))
+          (where (gen-sql-in table column cond-args)))
 
       (= cond-name "all")
       (let [inner-sql (->> cond-args
                            (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
                                            :condition %}))
                            (remove nil?)
-                           (string/join " union "))]
-        (str "select * from (" inner-sql ")"))
+                           (apply union))]
+        {:select [:*]
+         :from inner-sql})
 
       (= cond-name "any")
       (let [inner-sql (->> cond-args
                            (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
                                            :condition %}))
                            (remove nil?)
-                           (string/join " intersect "))]
-        (str "select * from (" inner-sql ")"))
+                           (apply intersect))]
+        {:select [:*]
+         :from inner-sql})
 
       :else
       (log/error "Function:" cond-name "not yet supported by gen-sql."))
@@ -169,9 +174,10 @@
          (map parse)
          (map gen-sql)
          (remove nil?)
+         (map sql/format)
          (map #(do
                  (log/debug "Executing SQL:" %)
-                 (jdbc/execute! conn [%]))))))
+                 (jdbc/execute! conn %))))))
 
 (defn -main
   "TODO: Add a docstring here."
