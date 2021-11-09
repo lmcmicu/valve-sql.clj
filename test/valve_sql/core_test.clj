@@ -3,7 +3,65 @@
             [clojure.string :as string]
             [valve-sql.core :refer [sqlify-condition]]))
 
-(deftest test-nested-1
+(deftest test-in
+  (testing "meals.second_course in(available_meats.name)"
+    (is (= (sqlify-condition #:conditions{:table "meals"
+                                          :column "second_course"
+                                          :condition "in(available_meats.name)"})
+           [(str "SELECT *, ? AS failed_condition "
+                 "FROM meals "
+                 "WHERE NOT second_course IN (SELECT name FROM available_meats)")
+            "in(available_meats.name)"]))))
+
+(deftest test-not-in
+  (testing "meals.second_course not(in(recalled_meats.name))"
+    (is (= (sqlify-condition #:conditions{:table "meals"
+                                          :column "second_course"
+                                          :condition "not(in(recalled_meats.name))"})
+           [(str "SELECT *, ? AS failed_condition "
+                 "FROM meals "
+                 "WHERE (second_course IN (SELECT name FROM recalled_meats))")
+            "not(in(recalled_meats.name))"]))))
+
+(deftest test-any
+  (testing "meals.soup any(in(cold_soups.name), in(sweet_soups.name))"
+    (is (= (sqlify-condition #:conditions{:table "meals"
+                                          :column "soup"
+                                          :condition "any(in(cold_soups.name), in(sweet_soups.name))"})
+           [(-> (str "SELECT * FROM ("
+                     "  SELECT *, ? AS failed_condition "
+                     "  FROM meals "
+                     "  WHERE NOT soup IN (SELECT name FROM cold_soups) "
+                     "  INTERSECT "
+                     "  SELECT *, ? AS failed_condition "
+                     "  FROM meals "
+                     "  WHERE NOT soup IN (SELECT name FROM sweet_soups)"
+                     ")")
+                (string/replace #"([\s\(])\s+" "$1")
+                (string/replace #"\s+\)" ")"))
+            "any(in(cold_soups.name), in(sweet_soups.name))"
+            "any(in(cold_soups.name), in(sweet_soups.name))"]))))
+
+(deftest test-not-any
+  (testing "meals.soup not(any(in(cold_soups.name), in(sweet_soups.name)))"
+    (is (= (sqlify-condition #:conditions{:table "meals"
+                                          :column "soup"
+                                          :condition "not(any(in(cold_soups.name), in(sweet_soups.name)))"})
+           [(-> (str "SELECT * FROM ("
+                     "  SELECT *, ? AS failed_condition "
+                     "  FROM meals "
+                     "  WHERE (soup IN (SELECT name FROM cold_soups)) "
+                     "  UNION "
+                     "  SELECT *, ? AS failed_condition "
+                     "  FROM meals "
+                     "  WHERE (soup IN (SELECT name FROM sweet_soups))"
+                     ")")
+                (string/replace #"([\s\(])\s+" "$1")
+                (string/replace #"\s+\)" ")"))
+            "not(any(in(cold_soups.name), in(sweet_soups.name)))"
+            "not(any(in(cold_soups.name), in(sweet_soups.name)))"]))))
+
+(deftest test-all
   (testing "meals.soup all(in(soups.name), in(available_soups.name))"
     (is (= (sqlify-condition #:conditions{:table "meals",
                                           :column "soup",
@@ -23,88 +81,27 @@
             "all(in(soups.name), in(available_soups.name))"
             "all(in(soups.name), in(available_soups.name))"]))))
 
-(deftest test-nested-2
-  (testing "meals.first_course all(in(pastas.name), in(available_pastas.name))"
-    (is (= (sqlify-condition #:conditions{:table "meals",
-                                          :column "first_course",
+(deftest test-not-all
+  (testing "meals.dessert not(all(in(bad_tasting_desserts.name), in(unhealthy_desserts.name)))"
+    (is (= (sqlify-condition #:conditions{:table "meals"
+                                          :column "dessert"
                                           :condition
-                                          "all(in(pastas.name), in(available_pastas.name))"})
+                                          "not(all(in(bad_tasting_desserts.name), in(unhealthy_desserts.name)))"})
            [(-> (str "SELECT * FROM ("
                      "  SELECT *, ? AS failed_condition "
                      "  FROM meals "
-                     "  WHERE NOT first_course IN (SELECT name FROM pastas) "
-                     "  UNION "
+                     "  WHERE (dessert IN (SELECT name FROM bad_tasting_desserts)) "
+                     "  INTERSECT "
                      "  SELECT *, ? AS failed_condition "
                      "  FROM meals "
-                     "  WHERE NOT first_course IN (SELECT name FROM available_pastas)"
+                     "  WHERE (dessert IN (SELECT name FROM unhealthy_desserts))"
                      ")")
                 (string/replace #"([\s\(])\s+" "$1")
                 (string/replace #"\s+\)" ")"))
-            "all(in(pastas.name), in(available_pastas.name))"
-            "all(in(pastas.name), in(available_pastas.name))"]))))
+            "not(all(in(bad_tasting_desserts.name), in(unhealthy_desserts.name)))"
+            "not(all(in(bad_tasting_desserts.name), in(unhealthy_desserts.name)))"]))))
 
-(deftest test-nested-3
-  (testing "meals.bread all(in(breads.name), in(available_breads.name))"
-    (is (= (sqlify-condition #:conditions{:table "meals",
-                                          :column "bread",
-                                          :condition
-                                          "all(in(breads.name), in(available_breads.name))"}))
-        [(-> (str "SELECT * FROM ("
-                  "  SELECT *, ? AS failed_condition "
-                  "  FROM meals "
-                  "  WHERE NOT bread IN (SELECT name FROM breads) "
-                  "  UNION "
-                  "  SELECT *, ? AS failed_condition "
-                  "  FROM meals "
-                  "  WHERE NOT bread IN (SELECT name FROM available_breads)"
-                  ")")
-             (string/replace #"([\s\(])\s+" "$1")
-             (string/replace #"\s+\)" ")"))
-         "all(in(breads.name), in(available_breads.name))"
-         "all(in(breads.name), in(available_breads.name))"])))
-
-(deftest test-nested-4
-  (testing "meals.side all(in(vegetables.name), in(available_vegetables.name))"
-    (is (= (sqlify-condition
-            #:conditions{:table "meals",
-                         :column "side",
-                         :condition
-                         "all(in(vegetables.name), in(available_vegetables.name))"})
-           [(-> (str "SELECT * FROM ("
-                     "  SELECT *, ? AS failed_condition "
-                     "  FROM meals "
-                     "  WHERE NOT side IN (SELECT name FROM vegetables) "
-                     "  UNION "
-                     "  SELECT *, ? AS failed_condition "
-                     "  FROM meals "
-                     "  WHERE NOT side IN (SELECT name FROM available_vegetables)"
-                     ")")
-                (string/replace #"([\s\(])\s+" "$1")
-                (string/replace #"\s+\)" ")"))
-            "all(in(vegetables.name), in(available_vegetables.name))"
-            "all(in(vegetables.name), in(available_vegetables.name))"]))))
-
-(deftest test-nested-5
-  (testing "meals.dessert all(in(desserts.name), in(available_desserts.name))"
-    (is (= (sqlify-condition #:conditions{:table "meals",
-                                          :column "dessert",
-                                          :condition
-                                          "all(in(desserts.name), in(available_desserts.name))"})
-           [(-> (str "SELECT * FROM ("
-                     "  SELECT *, ? AS failed_condition "
-                     "  FROM meals "
-                     "  WHERE NOT dessert IN (SELECT name FROM desserts) "
-                     "  UNION "
-                     "  SELECT *, ? AS failed_condition "
-                     "  FROM meals "
-                     "  WHERE NOT dessert IN (SELECT name FROM available_desserts)"
-                     ")")
-                (string/replace #"([\s\(])\s+" "$1")
-                (string/replace #"\s+\)" ")"))
-            "all(in(desserts.name), in(available_desserts.name))"
-            "all(in(desserts.name), in(available_desserts.name))"]))))
-
-(deftest test-double-nested-1
+(deftest test-alls-nested-in-any
   (testing "meals.second_course any(all(in(meats.name), in(available_meats.name)), all(in(veggie_mains.name), in(available_veggie_mains.name)))"
     (is (= (sqlify-condition #:conditions{:table "meals",
                                           :column "second_course",
@@ -138,7 +135,7 @@
          "any(all(in(meats.name), in(available_meats.name)), all(in(veggie_mains.name), in(available_veggie_mains.name)))"
          "any(all(in(meats.name), in(available_meats.name)), all(in(veggie_mains.name), in(available_veggie_mains.name)))"])))
 
-(deftest test-double-nested-2
+(deftest test-any-and-in-nested-in-all
   (testing "meals.wine all(any(in(white_wines.name), in(red_wines.name)), in(available_wines.name))"
     (is (= (sqlify-condition #:conditions{:table "meals",
                                           :column "wine",

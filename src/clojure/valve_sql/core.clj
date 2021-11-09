@@ -113,13 +113,16 @@
 
 (defn gen-sql-in
   "TODO: Add a docstring here"
-  [table column args]
+  [table column args negate?]
   (log/debug "Generating SQL to validate function: 'in' with args:" args "against table.column:"
              (str table "." column))
   (letfn [(field-condition [{child-table :table
                              child-column :column}]
-            [:not [:in (keyword column) (-> (select (keyword child-column))
-                                            (from (keyword child-table)))]])]
+            (let [base-condition [:in (keyword column) (-> (select (keyword child-column))
+                                                           (from (keyword child-table)))]]
+              (if negate?
+                base-condition
+                [:not base-condition])))]
     (->> args
          (map field-condition)
          (apply conj [:or]))))
@@ -131,7 +134,8 @@
     pre-parsed :pre-parsed
     {cond-type :type
      cond-name :name
-     cond-args :args} :condition}]
+     cond-args :args
+     negate? :negate?} :condition}]
   (log/debug "Generating SQL for cond-name:" cond-name "of type:" cond-type "with args:" cond-args
              "against table.column:" (str table "." column))
   (cond
@@ -140,25 +144,36 @@
       (= cond-name "in")
       (-> (select :* [pre-parsed :failed-condition])
           (from (keyword table))
-          (where (gen-sql-in table column cond-args)))
+          (where (gen-sql-in table column cond-args negate?)))
 
       (= cond-name "all")
       (let [inner-sql (->> cond-args
                            (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
-                                           :condition %}))
+                                           :condition (assoc % :negate? negate?)}))
                            (remove nil?)
-                           (apply union))]
+                           (#(if negate?
+                               (apply intersect %)
+                               (apply union %))))]
         {:select [:*]
          :from inner-sql})
 
       (= cond-name "any")
       (let [inner-sql (->> cond-args
                            (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
-                                           :condition %}))
+                                           :condition (assoc % :negate? negate?)}))
                            (remove nil?)
-                           (apply intersect))]
+                           (#(if negate?
+                               (apply union %)
+                               (apply intersect %))))]
         {:select [:*]
          :from inner-sql})
+
+      ;; not is a unary operator so we can just take the first argument from the list of args
+      ;; and associate a negation to it:
+      (= cond-name "not")
+      (let [operand (first cond-args)]
+        (gen-sql {:table table :column column :pre-parsed pre-parsed
+                  :condition (-> operand (assoc :negate? true))}))
 
       :else
       (log/error "Function:" cond-name "not yet supported by gen-sql."))
