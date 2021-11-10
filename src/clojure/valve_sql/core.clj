@@ -125,7 +125,9 @@
                 [:not base-condition])))]
     (->> args
          (map field-condition)
-         (apply conj [:or]))))
+         (#(if negate?
+             (apply conj [:and] %)
+             (apply conj [:or] %))))))
 
 (defn gen-sql
   "TODO: Add a docstring here"
