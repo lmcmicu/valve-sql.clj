@@ -3,7 +3,8 @@
             [clojure.string :as string]
             [clojure.pprint :refer [pprint]]
             [honey.sql :as sql]
-            [honey.sql.helpers :refer [select from where union intersect]]
+            [honey.sql.helpers :refer [select select-distinct from where union union-all intersect
+                                       with with-recursive]]
             [instaparse.core :as insta]
             [next.jdbc :as jdbc]
             [valve-sql.log :as log])
@@ -176,6 +177,32 @@
       (let [operand (first cond-args)]
         (gen-sql {:table table :column column :pre-parsed pre-parsed
                   :condition (-> operand (assoc :negate? true))}))
+
+      (= cond-name "list")
+      (if-not (-> cond-args (first) :type (= "string"))
+        (log/error "Invalid delimiter argument:" (first cond-args) "to list()")
+        (let [delim-arg (-> cond-args (first) :value (string/replace #"^\"|\"$" ""))
+              list-cond (second cond-args)
+              table-k (keyword table)
+              column-k (keyword column)
+              split-table-k (-> table (str "_split") (keyword))
+              split-column-k (keyword (str column "||'" delim-arg "'"))
+              inner-sql (gen-sql {:table split-table-k :column column-k :pre-parsed pre-parsed
+                                  :condition (assoc list-cond :negate? negate?)})]
+          (-> inner-sql
+              (with [[split-table-k {:columns [column-k]}]
+                     (-> (with-recursive [[split-table-k {:columns [column-k :str]}]
+                                          (union-all
+                                           (-> (select "" split-column-k)
+                                               (from table-k))
+                                           (-> (select [[:substr :str 0 [[:instr :str delim-arg]]]]
+                                                       [[:substr :str
+                                                         [:+ [[:instr :str delim-arg]] 1]]])
+                                               (from split-table-k)
+                                               (where [:<> :str ""])))])
+                         (select-distinct column-k)
+                         (from split-table-k)
+                         (where [:<> column-k ""]))]))))
 
       :else
       (log/error "Function:" cond-name "not yet supported by gen-sql."))
