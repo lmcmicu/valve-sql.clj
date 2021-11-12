@@ -2,9 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
             [clojure.pprint :refer [pprint]]
-            [honey.sql :as sql]
-            [honey.sql.helpers :refer [select select-distinct from where union union-all intersect
-                                       with with-recursive]]
+            [honey.sql :as honey]
+            [honey.sql.helpers :as h]
             [instaparse.core :as insta]
             [next.jdbc :as jdbc]
             [valve-sql.log :as log])
@@ -119,8 +118,8 @@
              (str table "." column))
   (letfn [(field-condition [{child-table :table
                              child-column :column}]
-            (let [base-condition [:in (keyword column) (-> (select (keyword child-column))
-                                                           (from (keyword child-table)))]]
+            (let [base-condition [:in (keyword column) (-> (h/select (keyword child-column))
+                                                           (h/from (keyword child-table)))]]
               (if negate?
                 base-condition
                 [:not base-condition])))]
@@ -145,9 +144,9 @@
     (= cond-type "function")
     (cond
       (= cond-name "in")
-      (-> (select :* [pre-parsed :failed-condition])
-          (from (keyword table))
-          (where (gen-sql-in table column cond-args negate?)))
+      (-> (h/select :* [pre-parsed :failed-condition])
+          (h/from (keyword table))
+          (h/where (gen-sql-in table column cond-args negate?)))
 
       (= cond-name "all")
       (let [inner-sql (->> cond-args
@@ -155,8 +154,8 @@
                                            :condition (assoc % :negate? negate?)}))
                            (remove nil?)
                            (#(if negate?
-                               (apply intersect %)
-                               (apply union %))))]
+                               (apply h/intersect %)
+                               (apply h/union %))))]
         {:select [:*]
          :from inner-sql})
 
@@ -166,8 +165,8 @@
                                            :condition (assoc % :negate? negate?)}))
                            (remove nil?)
                            (#(if negate?
-                               (apply union %)
-                               (apply intersect %))))]
+                               (apply h/union %)
+                               (apply h/intersect %))))]
         {:select [:*]
          :from inner-sql})
 
@@ -178,6 +177,8 @@
         (gen-sql {:table table :column column :pre-parsed pre-parsed
                   :condition (-> operand (assoc :negate? true))}))
 
+      ;; TODO: Although this properly handles the case: not(list(sep, expr), it doesn't seem to
+      ;; properly handle the case: not(list(sep, not(expr)))
       (= cond-name "list")
       (if-not (-> cond-args (first) :type (= "string"))
         (log/error "Invalid delimiter argument:" (first cond-args) "to list()")
@@ -189,21 +190,43 @@
               split-column-k (keyword (str column "||'" delim-arg "'"))
               inner-sql (gen-sql {:table split-table-k :column column-k :pre-parsed pre-parsed
                                   :condition (assoc list-cond :negate? negate?)})]
-          (-> inner-sql
-              (with [[split-table-k {:columns [column-k]}]
-                     (-> (with-recursive [[split-table-k {:columns [column-k :str]}]
-                                          (union-all
-                                           (-> (select "" split-column-k)
-                                               (from table-k))
-                                           (-> (select [[:substr :str 0 [[:instr :str delim-arg]]]]
-                                                       [[:substr :str
-                                                         [:+ [[:instr :str delim-arg]] 1]]])
-                                               (from split-table-k)
-                                               (where [:<> :str ""])))])
-                         (select-distinct column-k)
-                         (from split-table-k)
-                         (where [:<> column-k ""]))]))))
-
+          (if-not negate?
+            (-> inner-sql
+                (h/with [[split-table-k {:columns [column-k]}]
+                         (-> (h/with-recursive [[split-table-k {:columns [column-k :str]}]
+                                                (h/union-all
+                                                 (-> (h/select "" split-column-k)
+                                                     (h/from table-k))
+                                                 (-> (h/select [[:substr :str 0
+                                                                 [[:instr :str delim-arg]]]]
+                                                               [[:substr :str
+                                                                 [:+ [[:instr :str delim-arg]] 1]]])
+                                                     (h/from split-table-k)
+                                                     (h/where [:<> :str ""])))])
+                             (h/select-distinct column-k)
+                             (h/from split-table-k)
+                             (h/where [:<> column-k ""]))]))
+            (-> (h/with [[split-table-k {:columns [:reference :id column-k]}]
+                         (-> (h/with-recursive [[split-table-k {:columns [:reference :id column-k
+                                                                          :str]}]
+                                                (h/union-all
+                                                 (-> (h/select column-k 0 "" split-column-k)
+                                                     (h/from table-k))
+                                                 (-> (h/select :reference [[:+ :id 1]])
+                                                     (h/select [[:substr :str 0
+                                                                 [[:instr :str delim-arg]]]]
+                                                               [[:substr :str
+                                                                 [:+ [[:instr :str delim-arg]] 1]]])
+                                                     (h/from split-table-k)
+                                                     (h/where [:<> :str ""])))])
+                             (h/select :reference :id column-k)
+                             (h/from split-table-k)
+                             (h/where [:<> column-k ""]))])
+                (h/select :reference [pre-parsed :failed-condition])
+                (h/from split-table-k)
+                (h/group-by :reference)
+                (h/having := [:count 1] [:sum [:case (:where inner-sql) 1
+                                               :else 0]])))))
       :else
       (log/error "Function:" cond-name "not yet supported by gen-sql."))
 
@@ -216,7 +239,7 @@
   (-> condition
       (parse)
       (gen-sql)
-      (sql/format)))
+      (honey/format)))
 
 (defn validate-condition
   "TODO: Add a docstring here"
