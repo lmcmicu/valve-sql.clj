@@ -475,6 +475,40 @@
               1
               0])))))
 
+(deftest test-not-list-not
+  (let [condition "not(list(\"@\", not(in(lookup_t.lookup_c))))"]
+    (testing (str "target_t.target_c " condition)
+      (is (= (sqlify-condition #:conditions{:table "target_t"
+                                            :column "target_c"
+                                            :condition condition})
+             [(-> (str "WITH target_t_split (reference, id, target_c) AS ("
+                       "  WITH RECURSIVE target_t_split (reference, id, target_c, str) AS ("
+                       "    SELECT target_c, ?, ?, target_c||'@' "
+                       "    FROM target_t "
+                       "    UNION ALL "
+                       "    SELECT reference, id + ?, SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
+                       "    FROM target_t_split WHERE str <> ?) SELECT reference, id, target_c FROM target_t_split "
+                       "    WHERE target_c <> ?"
+                       "  ) "
+                       "  SELECT reference, ? AS failed_condition "
+                       "  FROM target_t_split "
+                       "  GROUP BY reference "
+                       "  HAVING COUNT(?) = SUM(CASE WHEN NOT target_c IN (SELECT lookup_c FROM lookup_t) THEN ? ELSE ? END)")
+                  (remove-ws))
+              0
+              ""
+              1
+              0
+              "@"
+              "@"
+              1
+              ""
+              ""
+              "not(list(\"@\", not(in(lookup_t.lookup_c))))"
+              1
+              1
+              0])))))
+
 (deftest test-list-not
   (let [condition "list(\"@\", not(in(lookup_t.lookup_c)))"]
     (testing (str "target_t.target_c " condition)

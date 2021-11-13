@@ -175,10 +175,12 @@
       (= cond-name "not")
       (let [operand (first cond-args)]
         (gen-sql {:table table :column column :pre-parsed pre-parsed
-                  :condition (-> operand (assoc :negate? true))}))
+                  :condition (-> operand
+                                 (assoc :negate?
+                                        ;; if negate? is set, then do not propogate the negation
+                                        ;; (case of double-negation):
+                                        (when-not negate? true)))}))
 
-      ;; TODO: Although this properly handles the case: not(list(sep, expr), it doesn't seem to
-      ;; properly handle the case: not(list(sep, not(expr)))
       (= cond-name "list")
       (if-not (-> cond-args (first) :type (= "string"))
         (log/error "Invalid delimiter argument:" (first cond-args) "to list()")
