@@ -500,3 +500,35 @@
               ""
               ""
               "list(\"@\", not(in(lookup_t.lookup_c)))"])))))
+
+(deftest test-not-list-not
+  (let [condition "not(list(\"@\", not(in(lookup_t.lookup_c))))"]
+    (testing (str "target_t.target_c " condition)
+      (is (= (sqlify-condition #:conditions{:table "target_t"
+                                            :column "target_c"
+                                            :condition condition})
+             [(-> (str "WITH target_t_split (target_c) AS ("
+                       "  WITH RECURSIVE target_t_split (target_c, str) AS ("
+                       "    SELECT ?, target_c||'@' "
+                       "    FROM target_t "
+                       "    UNION ALL "
+                       "    SELECT SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
+                       "    FROM target_t_split "
+                       "    WHERE str <> ?"
+                       "  ) "
+                       "  SELECT DISTINCT target_c "
+                       "  FROM target_t_split "
+                       "  WHERE target_c <> ?"
+                       ") "
+                       "SELECT *, ? AS failed_condition "
+                       "FROM target_t_split "
+                       "WHERE NOT target_c IN (SELECT lookup_c FROM lookup_t)")
+                  (remove-ws))
+              ""
+              0
+              "@"
+              "@"
+              1
+              ""
+              ""
+              "not(list(\"@\", not(in(lookup_t.lookup_c))))"])))))
