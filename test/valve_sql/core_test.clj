@@ -532,3 +532,147 @@
               ""
               ""
               "not(list(\"@\", not(in(lookup_t.lookup_c))))"])))))
+
+(deftest test-split
+  (let [condition "split(\"@\", 3, in(lookup_t_1.c), in(lookup_t_2.c), in(lookup_t_3.c))"]
+    (testing (str "target_t.target_c " condition)
+      (is (= (sqlify-condition #:conditions{:table "target_t"
+                                            :column "target_c"
+                                            :condition condition})
+             [(-> (str "WITH target_t_split (reference, id, target_c) AS ("
+                       "  WITH RECURSIVE target_t_split (reference, id, target_c, str) AS ("
+                       "    SELECT target_c, ?, ?, target_c||'@' "
+                       "    FROM target_t "
+                       "    UNION ALL "
+                       "    SELECT reference, id + ?, SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
+                       "    FROM target_t_split WHERE str <> ?"
+                       "  ) "
+                       "  SELECT reference, id, target_c "
+                       "  FROM target_t_split "
+                       "  WHERE target_c <> ?"
+                       "), count_invalid (reference, invalid) AS ("
+                       "  SELECT reference, COUNT(?) <> ? AS invalid "
+                       "  FROM target_t_split "
+                       "  GROUP BY reference"
+                       "), col1_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT target_c IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM target_t_split "
+                       "  WHERE id = ?"
+                       "), col2_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT target_c IN (SELECT c FROM lookup_t_2) AS invalid "
+                       "  FROM target_t_split "
+                       "  WHERE id = ?"
+                       "), col3_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT target_c IN (SELECT c FROM lookup_t_3) AS invalid "
+                       "  FROM target_t_split "
+                       "  WHERE id = ?"
+                       "), results (reference, count_invalid, col1_invalid, col2_invalid, col3_invalid) AS ("
+                       "  SELECT "
+                       "    count_invalid.reference AS reference, "
+                       "    count_invalid.invalid AS count_invalid, "
+                       "    col1_invalid.invalid AS col1_invalid, "
+                       "    col2_invalid.invalid AS col2_invalid, "
+                       "    col3_invalid.invalid AS col3_invalid "
+                       "  FROM count_invalid "
+                       "  LEFT JOIN col1_invalid ON col1_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference"
+                       ") "
+                       "SELECT *, ? AS failed_condition "
+                       "FROM results "
+                       "WHERE (? = count_invalid) "
+                       "  OR (? = col1_invalid) "
+                       "  OR (? = col2_invalid) "
+                       "  OR (? = col3_invalid)")
+                  (remove-ws))
+              0
+              ""
+              1
+              0
+              "@"
+              "@"
+              1
+              ""
+              ""
+              1
+              3
+              1
+              2
+              3
+              "split(\"@\", 3, in(lookup_t_1.c), in(lookup_t_2.c), in(lookup_t_3.c))"
+              1
+              1
+              1
+              1])))))
+
+(deftest test-not-split
+  (let [condition "not(split(\"@\", 3, in(lookup_t_1.c), in(lookup_t_2.c), in(lookup_t_3.c)))"]
+    (testing (str "target_t.target_c " condition)
+      (is (= (sqlify-condition #:conditions{:table "target_t"
+                                            :column "target_c"
+                                            :condition condition})
+             [(-> (str "WITH target_t_split (reference, id, target_c) AS ("
+                       "  WITH RECURSIVE target_t_split (reference, id, target_c, str) AS ("
+                       "    SELECT target_c, ?, ?, target_c||'@' "
+                       "    FROM target_t "
+                       "    UNION ALL "
+                       "    SELECT reference, id + ?, SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
+                       "    FROM target_t_split WHERE str <> ?"
+                       "  ) "
+                       "  SELECT reference, id, target_c "
+                       "  FROM target_t_split "
+                       "  WHERE target_c <> ?"
+                       "), count_invalid (reference, invalid) AS ("
+                       "  SELECT reference, COUNT(?) <> ? AS invalid "
+                       "  FROM target_t_split "
+                       "  GROUP BY reference"
+                       "), col1_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT target_c IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM target_t_split "
+                       "  WHERE id = ?"
+                       "), col2_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT target_c IN (SELECT c FROM lookup_t_2) AS invalid "
+                       "  FROM target_t_split "
+                       "  WHERE id = ?"
+                       "), col3_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT target_c IN (SELECT c FROM lookup_t_3) AS invalid "
+                       "  FROM target_t_split "
+                       "  WHERE id = ?"
+                       "), results (reference, count_invalid, col1_invalid, col2_invalid, col3_invalid) AS ("
+                       "  SELECT "
+                       "    count_invalid.reference AS reference, "
+                       "    count_invalid.invalid AS count_invalid, "
+                       "    col1_invalid.invalid AS col1_invalid, "
+                       "    col2_invalid.invalid AS col2_invalid, "
+                       "    col3_invalid.invalid AS col3_invalid "
+                       "  FROM count_invalid "
+                       "  LEFT JOIN col1_invalid ON col1_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference"
+                       ") "
+                       "SELECT *, ? AS failed_condition "
+                       "FROM results "
+                       "WHERE (? = count_invalid) "
+                       "  AND (? = col1_invalid) "
+                       "  AND (? = col2_invalid) "
+                       "  AND (? = col3_invalid)")
+                  (remove-ws))
+              0
+              ""
+              1
+              0
+              "@"
+              "@"
+              1
+              ""
+              ""
+              1
+              3
+              1
+              2
+              3
+              "not(split(\"@\", 3, in(lookup_t_1.c), in(lookup_t_2.c), in(lookup_t_3.c)))"
+              0
+              0
+              0
+              0])))))
