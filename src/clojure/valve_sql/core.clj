@@ -214,8 +214,8 @@
                                                 (h/union-all
                                                  (-> (h/select column-k 0 "" split-column-k)
                                                      (h/from table-k))
-                                                 (-> (h/select :reference [[:+ :id 1]])
-                                                     (h/select [[:substr :str 0
+                                                 (-> (h/select :reference [[:+ :id 1]]
+                                                               [[:substr :str 0
                                                                  [[:instr :str delim-arg]]]]
                                                                [[:substr :str
                                                                  [:+ [[:instr :str delim-arg]] 1]]])
