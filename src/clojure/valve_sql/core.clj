@@ -140,48 +140,8 @@
      negate? :negate?} :condition}]
   (log/debug "Generating SQL for cond-name:" cond-name "of type:" cond-type "with args:" cond-args
              "against table.column:" (str table "." column))
-  (cond
-    (= cond-type "function")
-    (cond
-      (= cond-name "in")
-      (-> (h/select :* [pre-parsed :failed-condition])
-          (h/from (keyword table))
-          (h/where (gen-sql-in table column cond-args negate?)))
-
-      (= cond-name "all")
-      (let [inner-sql (->> cond-args
-                           (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
-                                           :condition (assoc % :negate? negate?)}))
-                           (remove nil?)
-                           (#(if negate?
-                               (apply h/intersect %)
-                               (apply h/union %))))]
-        {:select [:*]
-         :from inner-sql})
-
-      (= cond-name "any")
-      (let [inner-sql (->> cond-args
-                           (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
-                                           :condition (assoc % :negate? negate?)}))
-                           (remove nil?)
-                           (#(if negate?
-                               (apply h/union %)
-                               (apply h/intersect %))))]
-        {:select [:*]
-         :from inner-sql})
-
-      ;; not is a unary operator so we can just take the first argument from the list of args
-      ;; and associate a negation to it:
-      (= cond-name "not")
-      (let [operand (first cond-args)]
-        (gen-sql {:table table :column column :pre-parsed pre-parsed
-                  :condition (-> operand
-                                 (assoc :negate?
-                                        ;; if negate? is set, then do not propogate the negation
-                                        ;; (case of double-negation):
-                                        (when-not negate? true)))}))
-
-      (= cond-name "list")
+  (letfn
+   [(list [] ;; Implements list(separator, expr)
       (if-not (-> cond-args (first) :type (= "string"))
         (log/error "Invalid delimiter argument:" (first cond-args) "to list()")
         (let [delim-arg (-> cond-args (first) :value (string/replace #"^\"|\"$" ""))
@@ -228,106 +188,156 @@
                 (h/from split-table-k)
                 (h/group-by :reference)
                 (h/having := [:count 1] [:sum [:case (:where inner-sql) 1
-                                               :else 0]])))))
+                                               :else 0]]))))))
 
-      (= cond-name "split")
-      (try
-        (let [delim-arg (-> cond-args (first) :value (string/replace #"^\"|\"$" ""))
-              num-conds (-> cond-args (second) :value (Integer/parseInt))
-              split-conds (drop 2 cond-args)]
-          (if-not (= num-conds (count split-conds))
-            (log/error "Number of conditions to split(sep, count, condition, ...) must match"
-                       "count, but count was:" num-conds "and there were" (count split-conds)
-                       "conditions")
-            (let [table-k (keyword table)
-                  column-k (keyword column)
-                  split-table-k (-> table (str "_split") (keyword))
-                  split-column-k (keyword (str column "||'" delim-arg "'"))
-                  inner-sql (for [split-cond split-conds]
-                              (gen-sql {:table split-table-k :column column-k :pre-parsed pre-parsed
-                                        ;; We do not pass along the negation but take care of it at
-                                        ;; this level.
-                                        :condition split-cond}))
-                  main-sql
-                  (-> (apply h/with
-                             (-> [[[split-table-k {:columns [:reference :id column-k]}]
-                                   (-> (h/with-recursive
-                                         [[split-table-k {:columns [:reference :id column-k :str]}]
-                                          (h/union-all
-                                           (-> (h/select column-k 0 "" split-column-k)
-                                               (h/from table-k))
-                                           (-> (h/select :reference
-                                                         [[:+ :id 1]]
-                                                         [[:substr :str 0
-                                                           [[:instr :str delim-arg]]]]
-                                                         [[:substr :str
-                                                           [:+ [[:instr :str delim-arg]] 1]]])
-                                               (h/from split-table-k)
-                                               (h/where [:<> :str ""])))])
-                                       (h/select :reference :id column-k)
-                                       (h/from split-table-k)
-                                       (h/where [:<> column-k ""]))]
-                                  [[:count-invalid {:columns [:reference :invalid]}]
-                                   (-> (h/select :reference [[:<> [:count 1] num-conds] :invalid])
-                                       (h/from split-table-k)
-                                       (h/group-by :reference))]]
-                                 (into (for [i (range 1 (+ num-conds 1))]
-                                         [[(keyword (str "col" i "-invalid")) ;; The table name
-                                           {:columns [:reference :invalid]}]
-                                          (-> (h/select :reference
-                                                        [(-> inner-sql
-                                                             (nth (- i 1)) ;; (i-1)th where clause
-                                                             :where)
-                                                         :invalid])
-                                              (h/from split-table-k)
-                                              (h/where [:= :id i]))]))
-                                 (into [[[:results {:columns
-                                                    (into [:reference :count-invalid]
-                                                          ;; The column names for the i columns:
-                                                          (for [i (range 1 (+ num-conds 1))]
-                                                            (keyword (str "col" i "-invalid"))))}]
-                                         (-> (apply h/select
-                                                    (into [[:count-invalid/reference :reference]
-                                                           [:count-invalid/invalid :count-invalid]]
-                                                          ;; The i "invalid" columns and aliases:
-                                                          (for [i (range 1 (+ num-conds 1))]
-                                                            [(keyword
-                                                              (str "col" i "-invalid/invalid"))
-                                                             (keyword (str "col" i "-invalid"))])))
-                                             (h/from :count-invalid)
-                                             (#(loop [query %, i 1]
-                                                 ;; Left joins for each of the i invalid tables:
-                                                 (if (-> num-conds (+ 1) (= i))
-                                                   query
-                                                   (let [table (keyword (str "col" i "-invalid"))
-                                                         column (keyword
-                                                                 (str "col" i
-                                                                      "-invalid/reference"))]
-                                                     (recur
-                                                      (h/left-join
-                                                       query table
-                                                       [:= column :count-invalid/reference])
-                                                      (+ i 1)))))))]])))
-                      (h/select :* [pre-parsed :failed-condition])
-                      (h/from :results))]
-              (-> main-sql
-                  (#(if-not negate?
-                      ;; Return rows that have something invalid in them:
-                      (h/where % (into [:or [:= 1 :count-invalid]]
-                                       (for [i (range 1 (+ num-conds 1))]
-                                         [:= 1 (keyword (str "col" i "-invalid"))])))
-                      ;; Return rows that have nothing invalid in them:
-                      (h/where % (into [:and [:= 0 :count-invalid]]
-                                       (for [i (range 1 (+ num-conds 1))]
-                                         [:= 0 (keyword (str "col" i "-invalid"))])))))))))
-        (catch Exception e
-          (log/error (.getMessage e))))
+    (split [] ;; Implements "split(separator, count, expr, ...)"
+      (let [delim-arg (-> cond-args (first) :value (string/replace #"^\"|\"$" ""))
+            num-conds (-> cond-args (second) :value (Integer/parseInt))
+            split-conds (drop 2 cond-args)]
+        (if-not (= num-conds (count split-conds))
+          (log/error "Number of conditions to split(sep, count, condition, ...) must match"
+                     "count, but count was:" num-conds "and there were" (count split-conds)
+                     "conditions")
+          (let [table-k (keyword table)
+                column-k (keyword column)
+                split-table-k (-> table (str "_split") (keyword))
+                split-column-k (keyword (str column "||'" delim-arg "'"))
+                inner-sql (for [split-cond split-conds]
+                            (gen-sql {:table split-table-k :column column-k
+                                      :pre-parsed pre-parsed
+                                         ;; Unlike list(), we do not pass along the negation but
+                                         ;; take care of it at this level (see below).
+                                      :condition split-cond}))
+                main-sql
+                (-> (apply h/with
+                           (-> [[[split-table-k {:columns [:reference :id column-k]}]
+                                 (-> (h/with-recursive
+                                       [[split-table-k {:columns [:reference :id column-k :str]}]
+                                        (h/union-all
+                                         (-> (h/select column-k 0 "" split-column-k)
+                                             (h/from table-k))
+                                         (-> (h/select :reference
+                                                       [[:+ :id 1]]
+                                                       [[:substr :str 0
+                                                         [[:instr :str delim-arg]]]]
+                                                       [[:substr :str
+                                                         [:+ [[:instr :str delim-arg]] 1]]])
+                                             (h/from split-table-k)
+                                             (h/where [:<> :str ""])))])
+                                     (h/select :reference :id column-k)
+                                     (h/from split-table-k)
+                                     (h/where [:<> column-k ""]))]
+                                [[:count-invalid {:columns [:reference :invalid]}]
+                                 (-> (h/select :reference [[:<> [:count 1] num-conds] :invalid])
+                                     (h/from split-table-k)
+                                     (h/group-by :reference))]]
+                               (into (for [i (range 1 (+ num-conds 1))]
+                                       [[(keyword (str "col" i "-invalid")) ;; The table name
+                                         {:columns [:reference :invalid]}]
+                                        (-> (h/select :reference
+                                                      [(-> inner-sql
+                                                           (nth (- i 1)) ;; (i-1)th where clause
+                                                           :where)
+                                                       :invalid])
+                                            (h/from split-table-k)
+                                            (h/where [:= :id i]))]))
+                               (into [[[:results {:columns
+                                                  (into [:reference :count-invalid]
+                                                           ;; The column names for the i columns:
+                                                        (for [i (range 1 (+ num-conds 1))]
+                                                          (keyword (str "col" i "-invalid"))))}]
+                                       (-> (apply h/select
+                                                  (into [[:count-invalid/reference :reference]
+                                                         [:count-invalid/invalid :count-invalid]]
+                                                           ;; The i "invalid" columns and aliases:
+                                                        (for [i (range 1 (+ num-conds 1))]
+                                                          [(keyword
+                                                            (str "col" i "-invalid/invalid"))
+                                                           (keyword (str "col" i "-invalid"))])))
+                                           (h/from :count-invalid)
+                                           (#(loop [query %, i 1]
+                                                  ;; Left joins for each of the i invalid tables:
+                                               (if (-> num-conds (+ 1) (= i))
+                                                 query
+                                                 (let [table (keyword (str "col" i "-invalid"))
+                                                       column (keyword
+                                                               (str "col" i
+                                                                    "-invalid/reference"))]
+                                                   (recur
+                                                    (h/left-join
+                                                     query table
+                                                     [:= column :count-invalid/reference])
+                                                    (+ i 1)))))))]])))
+                    (h/select :* [pre-parsed :failed-condition])
+                    (h/from :results))]
+            (-> main-sql
+                (#(if-not negate?
+                       ;; Return rows that have something invalid in them:
+                    (h/where % (into [:or [:= 1 :count-invalid]]
+                                     (for [i (range 1 (+ num-conds 1))]
+                                       [:= 1 (keyword (str "col" i "-invalid"))])))
+                       ;; Return rows that have nothing invalid in them:
+                    (h/where % (into [:and [:= 0 :count-invalid]]
+                                     (for [i (range 1 (+ num-conds 1))]
+                                       [:= 0 (keyword (str "col" i "-invalid"))]))))))))))]
+    (cond
+      (= cond-type "function")
+      (cond
+        (= cond-name "in")
+        (-> (h/select :* [pre-parsed :failed-condition])
+            (h/from (keyword table))
+            (h/where (gen-sql-in table column cond-args negate?)))
+
+        (= cond-name "all")
+        (let [inner-sql (->> cond-args
+                             (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
+                                             :condition (assoc % :negate? negate?)}))
+                             (remove nil?)
+                             (#(if negate?
+                                 (apply h/intersect %)
+                                 (apply h/union %))))]
+          {:select [:*]
+           :from inner-sql})
+
+        (= cond-name "any")
+        (let [inner-sql (->> cond-args
+                             (map #(gen-sql {:table table :column column :pre-parsed pre-parsed
+                                             :condition (assoc % :negate? negate?)}))
+                             (remove nil?)
+                             (#(if negate?
+                                 (apply h/union %)
+                                 (apply h/intersect %))))]
+          {:select [:*]
+           :from inner-sql})
+
+        ;; not is a unary operator so we can just take the first argument from the list of args
+        ;; and associate a negation to it:
+        (= cond-name "not")
+        (let [operand (first cond-args)]
+          (gen-sql {:table table :column column :pre-parsed pre-parsed
+                    :condition (-> operand
+                                   (assoc :negate?
+                                          ;; if negate? is set, then do not propogate the negation
+                                          ;; (case of double-negation):
+                                          (when-not negate? true)))}))
+
+        (= cond-name "list")
+        (try
+          (list)
+          (catch Exception e
+            (log/error (.getMessage e))))
+
+        (= cond-name "split")
+        (try
+          (split)
+          (catch Exception e
+            (log/error (.getMessage e))))
+
+        :else
+        (log/error "Function:" cond-name "not yet supported by gen-sql."))
 
       :else
-      (log/error "Function:" cond-name "not yet supported by gen-sql."))
-
-    :else
-    (log/error "Condition type:" cond-type "not yet supported by gen-sql.")))
+      (log/error "Condition type:" cond-type "not yet supported by gen-sql."))))
 
 (defn sqlify-condition
   "TODO: Add a docstring here"
