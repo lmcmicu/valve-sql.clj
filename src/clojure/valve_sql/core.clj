@@ -192,21 +192,43 @@
               split-column-k (keyword (str column "||'" delim-arg "'"))
               inner-sql (gen-sql {:table split-table-k :column column-k :pre-parsed pre-parsed
                                   :condition (assoc list-cond :negate? negate?)})]
-          (-> inner-sql
-              (h/with [[split-table-k {:columns [column-k]}]
-                       (-> (h/with-recursive [[split-table-k {:columns [column-k :str]}]
-                                              (h/union-all
-                                               (-> (h/select "" split-column-k)
-                                                   (h/from table-k))
-                                               (-> (h/select [[:substr :str 0
-                                                               [[:instr :str delim-arg]]]]
-                                                             [[:substr :str
-                                                               [:+ [[:instr :str delim-arg]] 1]]])
-                                                   (h/from split-table-k)
-                                                   (h/where [:<> :str ""])))])
-                           (h/select-distinct column-k)
-                           (h/from split-table-k)
-                           (h/where [:<> column-k ""]))]))))
+          (if-not negate?
+            (-> inner-sql
+                (h/with [[split-table-k {:columns [column-k]}]
+                         (-> (h/with-recursive [[split-table-k {:columns [column-k :str]}]
+                                                (h/union-all
+                                                 (-> (h/select "" split-column-k)
+                                                     (h/from table-k))
+                                                 (-> (h/select [[:substr :str 0
+                                                                 [[:instr :str delim-arg]]]]
+                                                               [[:substr :str
+                                                                 [:+ [[:instr :str delim-arg]] 1]]])
+                                                     (h/from split-table-k)
+                                                     (h/where [:<> :str ""])))])
+                             (h/select-distinct column-k)
+                             (h/from split-table-k)
+                             (h/where [:<> column-k ""]))]))
+            (-> (h/with [[split-table-k {:columns [:reference :id column-k]}]
+                         (-> (h/with-recursive [[split-table-k {:columns [:reference :id column-k
+                                                                          :str]}]
+                                                (h/union-all
+                                                 (-> (h/select column-k 0 "" split-column-k)
+                                                     (h/from table-k))
+                                                 (-> (h/select :reference [[:+ :id 1]]
+                                                               [[:substr :str 0
+                                                                 [[:instr :str delim-arg]]]]
+                                                               [[:substr :str
+                                                                 [:+ [[:instr :str delim-arg]] 1]]])
+                                                     (h/from split-table-k)
+                                                     (h/where [:<> :str ""])))])
+                             (h/select :reference :id column-k)
+                             (h/from split-table-k)
+                             (h/where [:<> column-k ""]))])
+                (h/select :reference [pre-parsed :failed-condition])
+                (h/from split-table-k)
+                (h/group-by :reference)
+                (h/having := [:count 1] [:sum [:case (:where inner-sql) 1
+                                               :else 0]])))))
 
       (= cond-name "split")
       (try
