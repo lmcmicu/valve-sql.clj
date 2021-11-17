@@ -547,31 +547,37 @@
       (is (= (sqlify-condition #:conditions{:table "target_t"
                                             :column "target_c"
                                             :condition condition})
-             [(-> (str "WITH target_t_split (target_c) AS ("
-                       "  WITH RECURSIVE target_t_split (target_c, str) AS ("
-                       "    SELECT ?, target_c||'@' "
+             [(-> (str "WITH target_t_split (reference, id, target_c) AS ("
+                       "  WITH RECURSIVE target_t_split (reference, id, target_c, str) AS ("
+                       "    SELECT target_c, ?, ?, target_c||'@' "
                        "    FROM target_t "
                        "    UNION ALL "
-                       "    SELECT SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
+                       "    SELECT reference, id + ?, SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
                        "    FROM target_t_split "
                        "    WHERE str <> ?"
                        "  ) "
-                       "  SELECT DISTINCT target_c "
+                       "  SELECT reference, id, target_c "
                        "  FROM target_t_split "
                        "  WHERE target_c <> ?"
                        ") "
-                       "SELECT *, ? AS failed_condition "
+                       "SELECT reference, ? AS failed_condition "
                        "FROM target_t_split "
-                       "WHERE NOT target_c IN (SELECT lookup_c FROM lookup_t)")
+                       "GROUP BY reference "
+                       "HAVING COUNT(?) = SUM(CASE WHEN NOT target_c IN (SELECT lookup_c FROM lookup_t) THEN ? ELSE ? END)")
                   (remove-ws))
+              0
               ""
+              1
               0
               "@"
               "@"
               1
               ""
               ""
-              "not(list(\"@\", not(in(lookup_t.lookup_c))))"])))))
+              "not(list(\"@\", not(in(lookup_t.lookup_c))))"
+              1
+              1
+              0])))))
 
 (deftest test-split
   (let [condition "split(\"@\", 3, in(lookup_t_1.c), in(lookup_t_2.c), in(lookup_t_3.c))"]

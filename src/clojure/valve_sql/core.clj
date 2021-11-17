@@ -245,7 +245,9 @@
                   split-column-k (keyword (str column "||'" delim-arg "'"))
                   inner-sql (for [split-cond split-conds]
                               (gen-sql {:table split-table-k :column column-k :pre-parsed pre-parsed
-                                        :condition (assoc split-cond :negate? negate?)}))
+                                        ;; We do not pass along the negation but take care of it at
+                                        ;; this level.
+                                        :condition split-cond}))
                   main-sql
                   (-> (apply h/with
                              (-> [[[split-table-k {:columns [:reference :id column-k]}]
