@@ -17,6 +17,9 @@
 (def conn
   (-> db (jdbc/get-datasource) (jdbc/get-connection)))
 
+;; Create user-defined regexp function:
+(. Sqlite (createRegexMatchesFunc conn))
+
 (defn- postprocess
   "Given the result of parsing a given condition using VALVE's grammar, generate a map containing
   the condition's type and its value, where the latter can in general be composed of further
@@ -129,6 +132,7 @@
              (apply conj [:and] %)
              (apply conj [:or] %))))))
 
+;; TODO: Need to add `rowid` to the output.
 (defn gen-sql
   "TODO: Add a docstring here"
   [{table :table
@@ -189,6 +193,47 @@
                 (h/group-by :reference)
                 (h/having := [:count 1] [:sum [:case (:where inner-sql) 1
                                                :else 0]]))))))
+
+    (concatenate [] ;; Implements "concat()"
+      (let [regexp (reduce
+                    #(str %1 (if (= (:type %2) "string")
+                               (string/replace (:value %2) #"^\"|\"$" "")
+                               ;; TODO: (\w+) is probably not exactly what we want ...
+                               "(\\w+)"))
+                    ""
+                    cond-args)
+            table-k (keyword table)
+            column-k (keyword column)
+            delim-arg "@"
+            conds (->> cond-args (filter #(not= (:type %) "string")))
+            num-conds (count conds)
+            regexp-func (keyword "regexp_matches")
+            inner-sql (gen-sql {:table "captures" :column "capture" :pre-parsed pre-parsed
+                                ;; Note that we do not associate negate? with the condition we send
+                                ;; to split(), but handle it at this level (see below).
+                                :condition {:type "function" :name "split"
+                                            :args (concat
+                                                   [{:type "string", :value delim-arg}
+                                                    {:type "string",
+                                                     :value (str num-conds)}]
+                                                   conds)}})]
+        (-> inner-sql
+            (h/with [[:captures {:columns [column-k :capture]}]
+                     (-> (h/select column-k [[regexp-func column-k regexp]])
+                         (h/from table-k))])
+            ;; Remove the main query that split uses and replace it with our own:
+            (dissoc :select :from :where)
+            (h/select column-k [pre-parsed :failed-condition])
+            (h/from :captures)
+            (h/left-join :results [:= :captures/capture :results/reference])
+            (h/where
+             (if negate?
+               (into [:and [:<> :captures/capture ""]]
+                     (for [i (range 1 (+ num-conds 1))]
+                       [:= 0 (keyword (str "col" i "-invalid"))]))
+               (into [:or [:= :captures/capture ""]]
+                     (for [i (range 1 (+ num-conds 1))]
+                       [:= 1 (keyword (str "col" i "-invalid"))])))))))
 
     (split [] ;; Implements "split(separator, count, expr, ...)"
       (let [delim-arg (-> cond-args (first) :value (string/replace #"^\"|\"$" ""))
@@ -268,7 +313,7 @@
                                                      query table
                                                      [:= column :count-invalid/reference])
                                                     (+ i 1)))))))]])))
-                    (h/select :* [pre-parsed :failed-condition])
+                    (h/select :reference [pre-parsed :failed-condition])
                     (h/from :results))]
             (-> main-sql
                 (#(if-not negate?
@@ -324,6 +369,12 @@
         (= cond-name "list")
         (try
           (list)
+          (catch Exception e
+            (log/error (.getMessage e))))
+
+        (= cond-name "concat")
+        (try
+          (concatenate)
           (catch Exception e
             (log/error (.getMessage e))))
 

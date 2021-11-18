@@ -624,7 +624,7 @@
                        "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
                        "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference"
                        ") "
-                       "SELECT *, ? AS failed_condition "
+                       "SELECT reference, ? AS failed_condition "
                        "FROM results "
                        "WHERE (? = count_invalid) "
                        "  OR (? = col1_invalid) "
@@ -696,7 +696,7 @@
                        "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
                        "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference"
                        ") "
-                       "SELECT *, ? AS failed_condition "
+                       "SELECT reference, ? AS failed_condition "
                        "FROM results "
                        "WHERE (? = count_invalid) "
                        "  OR (? = col1_invalid) "
@@ -768,7 +768,7 @@
                        "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
                        "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference"
                        ") "
-                       "SELECT *, ? AS failed_condition "
+                       "SELECT reference, ? AS failed_condition "
                        "FROM results "
                        "WHERE (? = count_invalid) "
                        "  AND (? = col1_invalid) "
@@ -840,7 +840,7 @@
                        "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
                        "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference"
                        ") "
-                       "SELECT *, ? AS failed_condition "
+                       "SELECT reference, ? AS failed_condition "
                        "FROM results "
                        "WHERE (? = count_invalid) "
                        "  AND (? = col1_invalid) "
@@ -862,6 +862,354 @@
               2
               3
               condition
+              0
+              0
+              0
+              0])))))
+
+(deftest test-concat
+  (let [condition "concat(\"Prefer \", in(lookup_t_1.c), \" over \", in(lookup_t_1.c), \" and \", in(lookup_t_2.c), \" over \", in(lookup_t_2.c))"
+        regexp "Prefer (\\w+) over (\\w+) and (\\w+) over (\\w+)"]
+    (testing (str "target_t.target_c " condition)
+      (is (= (sqlify-condition #:conditions{:table "target_t"
+                                            :column "target_c"
+                                            :condition condition})
+             [(-> (str "WITH captures_split (reference, id, capture) AS ("
+                       "  WITH RECURSIVE captures_split (reference, id, capture, str) AS ("
+                       "    SELECT capture, ?, ?, capture||'@' "
+                       "    FROM captures "
+                       "    UNION ALL "
+                       "    SELECT reference, id + ?, SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
+                       "    FROM captures_split "
+                       "    WHERE str <> ?"
+                       "  ) "
+                       "  SELECT reference, id, capture "
+                       "  FROM captures_split "
+                       "  WHERE capture <> ?"
+                       "), count_invalid (reference, invalid) AS ("
+                       "  SELECT reference, COUNT(?) <> ? AS invalid "
+                       "  FROM captures_split "
+                       "  GROUP BY reference"
+                       "), col1_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), col2_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), col3_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_2) AS invalid "
+                       "  FROM captures_split WHERE id = ?"
+                       "), col4_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_2) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), results (reference, count_invalid, col1_invalid, col2_invalid, col3_invalid, col4_invalid) AS ("
+                       "  SELECT "
+                       "    count_invalid.reference AS reference, "
+                       "    count_invalid.invalid AS count_invalid, "
+                       "    col1_invalid.invalid AS col1_invalid, "
+                       "    col2_invalid.invalid AS col2_invalid, "
+                       "    col3_invalid.invalid AS col3_invalid, "
+                       "    col4_invalid.invalid AS col4_invalid "
+                       "  FROM count_invalid "
+                       "  LEFT JOIN col1_invalid ON col1_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col4_invalid ON col4_invalid.reference = count_invalid.reference"
+                       "), captures (target_c, capture) AS ("
+                       "  SELECT target_c, REGEXP_MATCHES(target_c, ?) "
+                       "  FROM target_t"
+                       ") "
+                       "SELECT target_c, ? AS failed_condition "
+                       "FROM captures "
+                       "LEFT JOIN results ON captures.capture = results.reference "
+                       "WHERE (captures.capture = ?) "
+                       "   OR (? = col1_invalid) "
+                       "   OR (? = col2_invalid) "
+                       "   OR (? = col3_invalid) "
+                       "   OR (? = col4_invalid)")
+                  (remove-ws))
+              0
+              ""
+              1
+              0
+              "@"
+              "@"
+              1
+              ""
+              ""
+              1
+              4
+              1
+              2
+              3
+              4
+              regexp
+              condition
+              ""
+              1
+              1
+              1
+              1])))))
+
+(deftest test-concat-not
+  (let [condition "concat(\"Prefer \", in(lookup_t_1.c), \" over \", in(lookup_t_1.c), \" and \", not(in(lookup_t_2.c)), \" over \", in(lookup_t_2.c))"
+        regexp "Prefer (\\w+) over (\\w+) and (\\w+) over (\\w+)"]
+    (testing (str "target_t.target_c " condition)
+      (is (= (sqlify-condition #:conditions{:table "target_t"
+                                            :column "target_c"
+                                            :condition condition})
+             [(-> (str "WITH captures_split (reference, id, capture) AS ("
+                       "  WITH RECURSIVE captures_split (reference, id, capture, str) AS ("
+                       "    SELECT capture, ?, ?, capture||'@' "
+                       "    FROM captures "
+                       "    UNION ALL "
+                       "    SELECT reference, id + ?, SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
+                       "    FROM captures_split "
+                       "    WHERE str <> ?"
+                       "  ) "
+                       "  SELECT reference, id, capture "
+                       "  FROM captures_split "
+                       "  WHERE capture <> ?"
+                       "), count_invalid (reference, invalid) AS ("
+                       "  SELECT reference, COUNT(?) <> ? AS invalid "
+                       "  FROM captures_split "
+                       "  GROUP BY reference"
+                       "), col1_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), col2_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), col3_invalid (reference, invalid) AS ("
+                       "  SELECT reference, (capture IN (SELECT c FROM lookup_t_2)) AS invalid "
+                       "  FROM captures_split WHERE id = ?"
+                       "), col4_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_2) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), results (reference, count_invalid, col1_invalid, col2_invalid, col3_invalid, col4_invalid) AS ("
+                       "  SELECT "
+                       "    count_invalid.reference AS reference, "
+                       "    count_invalid.invalid AS count_invalid, "
+                       "    col1_invalid.invalid AS col1_invalid, "
+                       "    col2_invalid.invalid AS col2_invalid, "
+                       "    col3_invalid.invalid AS col3_invalid, "
+                       "    col4_invalid.invalid AS col4_invalid "
+                       "  FROM count_invalid "
+                       "  LEFT JOIN col1_invalid ON col1_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col4_invalid ON col4_invalid.reference = count_invalid.reference"
+                       "), captures (target_c, capture) AS ("
+                       "  SELECT target_c, REGEXP_MATCHES(target_c, ?) "
+                       "  FROM target_t"
+                       ") "
+                       "SELECT target_c, ? AS failed_condition "
+                       "FROM captures "
+                       "LEFT JOIN results ON captures.capture = results.reference "
+                       "WHERE (captures.capture = ?) "
+                       "   OR (? = col1_invalid) "
+                       "   OR (? = col2_invalid) "
+                       "   OR (? = col3_invalid) "
+                       "   OR (? = col4_invalid)")
+                  (remove-ws))
+              0
+              ""
+              1
+              0
+              "@"
+              "@"
+              1
+              ""
+              ""
+              1
+              4
+              1
+              2
+              3
+              4
+              regexp
+              condition
+              ""
+              1
+              1
+              1
+              1])))))
+
+(deftest test-not-concat
+  (let [condition "not(concat(\"Prefer \", in(lookup_t_1.c), \" over \", in(lookup_t_1.c), \" and \", in(lookup_t_2.c), \" over \", in(lookup_t_2.c)))"
+        regexp "Prefer (\\w+) over (\\w+) and (\\w+) over (\\w+)"]
+    (testing (str "target_t.target_c " condition)
+      (is (= (sqlify-condition #:conditions{:table "target_t"
+                                            :column "target_c"
+                                            :condition condition})
+             [(-> (str "WITH captures_split (reference, id, capture) AS ("
+                       "  WITH RECURSIVE captures_split (reference, id, capture, str) AS ("
+                       "    SELECT capture, ?, ?, capture||'@' "
+                       "    FROM captures "
+                       "    UNION ALL "
+                       "    SELECT reference, id + ?, SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
+                       "    FROM captures_split "
+                       "    WHERE str <> ?"
+                       "  ) "
+                       "  SELECT reference, id, capture "
+                       "  FROM captures_split "
+                       "  WHERE capture <> ?"
+                       "), count_invalid (reference, invalid) AS ("
+                       "  SELECT reference, COUNT(?) <> ? AS invalid "
+                       "  FROM captures_split "
+                       "  GROUP BY reference"
+                       "), col1_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), col2_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), col3_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_2) AS invalid "
+                       "  FROM captures_split WHERE id = ?"
+                       "), col4_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_2) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), results (reference, count_invalid, col1_invalid, col2_invalid, col3_invalid, col4_invalid) AS ("
+                       "  SELECT "
+                       "    count_invalid.reference AS reference, "
+                       "    count_invalid.invalid AS count_invalid, "
+                       "    col1_invalid.invalid AS col1_invalid, "
+                       "    col2_invalid.invalid AS col2_invalid, "
+                       "    col3_invalid.invalid AS col3_invalid, "
+                       "    col4_invalid.invalid AS col4_invalid "
+                       "  FROM count_invalid "
+                       "  LEFT JOIN col1_invalid ON col1_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col4_invalid ON col4_invalid.reference = count_invalid.reference"
+                       "), captures (target_c, capture) AS ("
+                       "  SELECT target_c, REGEXP_MATCHES(target_c, ?) "
+                       "  FROM target_t"
+                       ") "
+                       "SELECT target_c, ? AS failed_condition "
+                       "FROM captures "
+                       "LEFT JOIN results ON captures.capture = results.reference "
+                       "WHERE (captures.capture <> ?) "
+                       "  AND (? = col1_invalid) "
+                       "  AND (? = col2_invalid) "
+                       "  AND (? = col3_invalid) "
+                       "  AND (? = col4_invalid)")
+                  (remove-ws))
+              0
+              ""
+              1
+              0
+              "@"
+              "@"
+              1
+              ""
+              ""
+              1
+              4
+              1
+              2
+              3
+              4
+              regexp
+              condition
+              ""
+              0
+              0
+              0
+              0])))))
+
+(deftest test-not-concat-not
+  (let [condition "not(concat(\"Prefer \", in(lookup_t_1.c), \" over \", in(lookup_t_1.c), \" and \", not(in(lookup_t_2.c)), \" over \", in(lookup_t_2.c)))"
+        regexp "Prefer (\\w+) over (\\w+) and (\\w+) over (\\w+)"]
+    (testing (str "target_t.target_c " condition)
+      (is (= (sqlify-condition #:conditions{:table "target_t"
+                                            :column "target_c"
+                                            :condition condition})
+             [(-> (str "WITH captures_split (reference, id, capture) AS ("
+                       "  WITH RECURSIVE captures_split (reference, id, capture, str) AS ("
+                       "    SELECT capture, ?, ?, capture||'@' "
+                       "    FROM captures "
+                       "    UNION ALL "
+                       "    SELECT reference, id + ?, SUBSTR(str, ?, (INSTR(str, ?))), SUBSTR(str, (INSTR(str, ?)) + ?) "
+                       "    FROM captures_split "
+                       "    WHERE str <> ?"
+                       "  ) "
+                       "  SELECT reference, id, capture "
+                       "  FROM captures_split "
+                       "  WHERE capture <> ?"
+                       "), count_invalid (reference, invalid) AS ("
+                       "  SELECT reference, COUNT(?) <> ? AS invalid "
+                       "  FROM captures_split "
+                       "  GROUP BY reference"
+                       "), col1_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), col2_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_1) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), col3_invalid (reference, invalid) AS ("
+                       "  SELECT reference, (capture IN (SELECT c FROM lookup_t_2)) AS invalid "
+                       "  FROM captures_split WHERE id = ?"
+                       "), col4_invalid (reference, invalid) AS ("
+                       "  SELECT reference, NOT capture IN (SELECT c FROM lookup_t_2) AS invalid "
+                       "  FROM captures_split "
+                       "  WHERE id = ?"
+                       "), results (reference, count_invalid, col1_invalid, col2_invalid, col3_invalid, col4_invalid) AS ("
+                       "  SELECT "
+                       "    count_invalid.reference AS reference, "
+                       "    count_invalid.invalid AS count_invalid, "
+                       "    col1_invalid.invalid AS col1_invalid, "
+                       "    col2_invalid.invalid AS col2_invalid, "
+                       "    col3_invalid.invalid AS col3_invalid, "
+                       "    col4_invalid.invalid AS col4_invalid "
+                       "  FROM count_invalid "
+                       "  LEFT JOIN col1_invalid ON col1_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col2_invalid ON col2_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col3_invalid ON col3_invalid.reference = count_invalid.reference "
+                       "  LEFT JOIN col4_invalid ON col4_invalid.reference = count_invalid.reference"
+                       "), captures (target_c, capture) AS ("
+                       "  SELECT target_c, REGEXP_MATCHES(target_c, ?) "
+                       "  FROM target_t"
+                       ") "
+                       "SELECT target_c, ? AS failed_condition "
+                       "FROM captures "
+                       "LEFT JOIN results ON captures.capture = results.reference "
+                       "WHERE (captures.capture <> ?) "
+                       "  AND (? = col1_invalid) "
+                       "  AND (? = col2_invalid) "
+                       "  AND (? = col3_invalid) "
+                       "  AND (? = col4_invalid)")
+                  (remove-ws))
+              0
+              ""
+              1
+              0
+              "@"
+              "@"
+              1
+              ""
+              ""
+              1
+              4
+              1
+              2
+              3
+              4
+              regexp
+              condition
+              ""
               0
               0
               0
