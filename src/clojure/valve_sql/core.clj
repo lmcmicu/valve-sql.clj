@@ -158,39 +158,40 @@
                                   :condition (assoc list-cond :negate? negate?)})]
           (if-not negate?
             (-> inner-sql
-                (h/with [[split-table-k {:columns [column-k]}]
-                         (-> (h/with-recursive [[split-table-k {:columns [column-k :str]}]
+                (h/with [[split-table-k {:columns [:rowid column-k]}]
+                         (-> (h/with-recursive [[split-table-k {:columns [:rowid column-k :str]}]
                                                 (h/union-all
-                                                 (-> (h/select "" split-column-k)
+                                                 (-> (h/select :rowid "" split-column-k)
                                                      (h/from table-k))
-                                                 (-> (h/select [[:substr :str 0
-                                                                 [[:instr :str delim-arg]]]]
-                                                               [[:substr :str
-                                                                 [:+ [[:instr :str delim-arg]] 1]]])
-                                                     (h/from split-table-k)
-                                                     (h/where [:<> :str ""])))])
-                             (h/select-distinct column-k)
-                             (h/from split-table-k)
-                             (h/where [:<> column-k ""]))]))
-            (-> (h/with [[split-table-k {:columns [:reference :id column-k]}]
-                         (-> (h/with-recursive [[split-table-k {:columns [:reference :id column-k
-                                                                          :str]}]
-                                                (h/union-all
-                                                 (-> (h/select column-k 0 "" split-column-k)
-                                                     (h/from table-k))
-                                                 (-> (h/select :reference [[:+ :id 1]]
+                                                 (-> (h/select :rowid
                                                                [[:substr :str 0
                                                                  [[:instr :str delim-arg]]]]
                                                                [[:substr :str
                                                                  [:+ [[:instr :str delim-arg]] 1]]])
                                                      (h/from split-table-k)
                                                      (h/where [:<> :str ""])))])
-                             (h/select :reference :id column-k)
+                             (h/select :rowid column-k)
+                             (h/from split-table-k)
+                             (h/where [:<> column-k ""]))]))
+            (-> (h/with [[split-table-k {:columns [:rowid :reference :id column-k]}]
+                         (-> (h/with-recursive [[split-table-k {:columns [:rowid :reference :id
+                                                                          column-k :str]}]
+                                                (h/union-all
+                                                 (-> (h/select :rowid column-k 0 "" split-column-k)
+                                                     (h/from table-k))
+                                                 (-> (h/select :rowid :reference [[:+ :id 1]]
+                                                               [[:substr :str 0
+                                                                 [[:instr :str delim-arg]]]]
+                                                               [[:substr :str
+                                                                 [:+ [[:instr :str delim-arg]] 1]]])
+                                                     (h/from split-table-k)
+                                                     (h/where [:<> :str ""])))])
+                             (h/select :rowid :reference :id column-k)
                              (h/from split-table-k)
                              (h/where [:<> column-k ""]))])
-                (h/select :reference [pre-parsed :failed-condition])
+                (h/select :rowid :reference [pre-parsed :failed-condition])
                 (h/from split-table-k)
-                (h/group-by :reference)
+                (h/group-by :rowid :reference)
                 (h/having := [:count 1] [:sum [:case (:where inner-sql) 1
                                                :else 0]]))))))
 
@@ -218,14 +219,16 @@
                                                      :value (str num-conds)}]
                                                    conds)}})]
         (-> inner-sql
-            (h/with [[:captures {:columns [column-k :capture]}]
-                     (-> (h/select column-k [[regexp-func column-k regexp]])
+            (h/with [[:captures {:columns [:rowid column-k :capture]}]
+                     (-> (h/select :rowid column-k [[regexp-func column-k regexp]])
                          (h/from table-k))])
             ;; Remove the main query that split uses and replace it with our own:
             (dissoc :select :from :where)
-            (h/select column-k [pre-parsed :failed-condition])
+            (h/select :captures/rowid column-k [pre-parsed :failed-condition])
             (h/from :captures)
-            (h/left-join :results [:= :captures/capture :results/reference])
+            (h/left-join :results [:and
+                                   [:= :captures/rowid :results/rowid]
+                                   [:= :captures/capture :results/reference]])
             (h/where
              (if negate?
                (into [:and [:<> :captures/capture ""]]
@@ -255,13 +258,14 @@
                                       :condition split-cond}))
                 main-sql
                 (-> (apply h/with
-                           (-> [[[split-table-k {:columns [:reference :id column-k]}]
+                           (-> [[[split-table-k {:columns [:rowid :reference :id column-k]}]
                                  (-> (h/with-recursive
-                                       [[split-table-k {:columns [:reference :id column-k :str]}]
+                                       [[split-table-k {:columns [:rowid :reference :id column-k :str]}]
                                         (h/union-all
-                                         (-> (h/select column-k 0 "" split-column-k)
+                                         (-> (h/select :rowid column-k 0 "" split-column-k)
                                              (h/from table-k))
-                                         (-> (h/select :reference
+                                         (-> (h/select :rowid
+                                                       :reference
                                                        [[:+ :id 1]]
                                                        [[:substr :str 0
                                                          [[:instr :str delim-arg]]]]
@@ -269,17 +273,18 @@
                                                          [:+ [[:instr :str delim-arg]] 1]]])
                                              (h/from split-table-k)
                                              (h/where [:<> :str ""])))])
-                                     (h/select :reference :id column-k)
+                                     (h/select :rowid :reference :id column-k)
                                      (h/from split-table-k)
                                      (h/where [:<> column-k ""]))]
-                                [[:count-invalid {:columns [:reference :invalid]}]
-                                 (-> (h/select :reference [[:<> [:count 1] num-conds] :invalid])
+                                [[:count-invalid {:columns [:rowid :reference :invalid]}]
+                                 (-> (h/select :rowid :reference [[:<> [:count 1] num-conds] :invalid])
                                      (h/from split-table-k)
-                                     (h/group-by :reference))]]
+                                     (h/group-by :rowid :reference))]]
                                (into (for [i (range 1 (+ num-conds 1))]
                                        [[(keyword (str "col" i "-invalid")) ;; The table name
-                                         {:columns [:reference :invalid]}]
-                                        (-> (h/select :reference
+                                         {:columns [:rowid :reference :invalid]}]
+                                        (-> (h/select :rowid
+                                                      :reference
                                                       [(-> inner-sql
                                                            (nth (- i 1)) ;; (i-1)th where clause
                                                            :where)
@@ -287,12 +292,13 @@
                                             (h/from split-table-k)
                                             (h/where [:= :id i]))]))
                                (into [[[:results {:columns
-                                                  (into [:reference :count-invalid]
+                                                  (into [:rowid :reference :count-invalid]
                                                            ;; The column names for the i columns:
                                                         (for [i (range 1 (+ num-conds 1))]
                                                           (keyword (str "col" i "-invalid"))))}]
                                        (-> (apply h/select
-                                                  (into [[:count-invalid/reference :reference]
+                                                  (into [[:count-invalid/rowid :rowid]
+                                                         [:count-invalid/reference :reference]
                                                          [:count-invalid/invalid :count-invalid]]
                                                            ;; The i "invalid" columns and aliases:
                                                         (for [i (range 1 (+ num-conds 1))]
@@ -301,19 +307,24 @@
                                                            (keyword (str "col" i "-invalid"))])))
                                            (h/from :count-invalid)
                                            (#(loop [query %, i 1]
-                                                  ;; Left joins for each of the i invalid tables:
+                                               ;; Left joins for each of the i invalid tables:
                                                (if (-> num-conds (+ 1) (= i))
                                                  query
                                                  (let [table (keyword (str "col" i "-invalid"))
-                                                       column (keyword
-                                                               (str "col" i
-                                                                    "-invalid/reference"))]
+                                                       column-ref (keyword
+                                                                   (str "col" i
+                                                                        "-invalid/reference"))
+                                                       column-rid (keyword
+                                                                   (str "col" i
+                                                                        "-invalid/rowid"))]
                                                    (recur
                                                     (h/left-join
                                                      query table
-                                                     [:= column :count-invalid/reference])
+                                                     [:and
+                                                      [:= column-rid :count-invalid/rowid]
+                                                      [:= column-ref :count-invalid/reference]])
                                                     (+ i 1)))))))]])))
-                    (h/select :reference [pre-parsed :failed-condition])
+                    (h/select :rowid :reference [pre-parsed :failed-condition])
                     (h/from :results))]
             (-> main-sql
                 (#(if-not negate?
@@ -329,7 +340,7 @@
       (= cond-type "function")
       (cond
         (= cond-name "in")
-        (-> (h/select :* [pre-parsed :failed-condition])
+        (-> (h/select :rowid, (keyword column) [pre-parsed :failed-condition])
             (h/from (keyword table))
             (h/where (gen-sql-in table column cond-args negate?)))
 
@@ -396,7 +407,7 @@
   (-> condition
       (parse)
       (gen-sql)
-      (honey/format)))
+      (honey/format {:inline false})))
 
 (defn validate-condition
   "TODO: Add a docstring here"
